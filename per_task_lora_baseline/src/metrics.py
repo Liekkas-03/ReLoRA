@@ -1,40 +1,63 @@
 from __future__ import annotations
 
-import re
+import string
 from collections.abc import Sequence
 
-import numpy as np
-
-from .task_specs import TaskSpec
-
-
-def normalize_text(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+try:
+    from rouge_score import rouge_scorer
+except ImportError:  # pragma: no cover - only used when optional dependency is absent.
+    rouge_scorer = None
 
 
-def decode_label_id(text: str, task: TaskSpec) -> int:
-    norm = normalize_text(text)
-    labels = [normalize_text(label) for label in task.label_names]
-    for idx, label in enumerate(labels):
-        if norm == label:
-            return idx
-    for idx, label in enumerate(labels):
-        if label and label in norm:
-            return idx
-    return -1
+ANSWER_PREFIX = "Answer:"
 
 
-def accuracy_from_texts(pred_texts: Sequence[str], gold_ids: Sequence[int], task: TaskSpec) -> dict[str, float]:
-    pred_ids = [decode_label_id(text, task) for text in pred_texts]
-    gold = np.asarray(gold_ids, dtype=np.int64)
-    pred = np.asarray(pred_ids, dtype=np.int64)
-    valid = pred >= 0
-    accuracy = float((pred == gold).mean()) if len(gold) else 0.0
-    parse_rate = float(valid.mean()) if len(valid) else 0.0
+def normalize_answer(text: str) -> str:
+    """Lower text, remove punctuation, and fix whitespace, matching O-LoRA."""
+
+    def remove_punc(value: str) -> str:
+        exclude = set(string.punctuation)
+        return "".join(ch for ch in value if ch not in exclude)
+
+    return " ".join(remove_punc(text.lower()).split())
+
+
+def exact_match_score(prediction: str, ground_truth: str) -> bool:
+    return normalize_answer(prediction) == normalize_answer(ground_truth)
+
+
+def rouge_score(prediction: str, ground_truth: str, rouge_type: str) -> float:
+    if rouge_scorer is None:
+        return 0.0
+    scorer = rouge_scorer.RougeScorer([rouge_type], use_stemmer=True)
+    return scorer.score(prediction=prediction, target=ground_truth)[rouge_type].fmeasure
+
+
+def strip_answer_prefix(text: str) -> str:
+    if ANSWER_PREFIX in text:
+        return text.split(ANSWER_PREFIX)[-1].strip()
+    return ""
+
+
+def compute_olora_metrics(predictions: Sequence[str], references: Sequence[str]) -> dict[str, float]:
+    if len(predictions) != len(references):
+        raise ValueError(
+            f"# of predictions {len(predictions)} does not match # of references {len(references)}."
+        )
+    if not references:
+        return {"exact_match": 0.0, "rouge1": 0.0, "rougeL": 0.0}
+
+    exact_match = 0.0
+    rouge1 = 0.0
+    rouge_l = 0.0
+    for prediction, reference in zip(predictions, references):
+        exact_match += float(exact_match_score(prediction, reference))
+        rouge1 += rouge_score(prediction, reference, "rouge1")
+        rouge_l += rouge_score(prediction, reference, "rougeL")
+
+    total = len(references)
     return {
-        "accuracy": accuracy,
-        "parse_rate": parse_rate,
-        "num_samples": int(len(gold)),
+        "exact_match": round(100.0 * exact_match / total, 4),
+        "rouge1": round(100.0 * rouge1 / total, 4),
+        "rougeL": round(100.0 * rouge_l / total, 4),
     }

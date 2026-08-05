@@ -4,6 +4,10 @@ outputs/
 models/
 datasets/
 cache/
+CL_Benchmark/
+O-LoRA/
+O-LoRA-main/
+*.zip
 *.pt
 *.pth
 *.bin

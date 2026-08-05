@@ -11,28 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.config import load_config
-from src.data import build_chat_prompt
-from src.metrics import decode_label_id
+from src.data import build_instance_instruction, build_model_prompt, load_task_labels
+from src.metrics import exact_match_score, strip_answer_prefix
 from src.modeling import load_base_causal_lm, load_tokenizer
 from src.task_specs import get_task_spec
-
-
-def make_example(args, task_name: str) -> dict:
-    if task_name == "dbpedia":
-        return {"title": args.title or "", "content": args.text or ""}
-    if task_name == "amazon":
-        return {"title": args.title or "", "content": args.text or ""}
-    if task_name == "yelp":
-        return {"text": args.text or ""}
-    if task_name == "yahoo":
-        return {
-            "question_title": args.title or "",
-            "question_content": args.text or "",
-            "best_answer": args.answer or "",
-        }
-    if task_name == "ag_news":
-        return {"text": args.text or ""}
-    raise ValueError(f"Unsupported task: {task_name}")
 
 
 @torch.no_grad()
@@ -41,14 +23,35 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--task", required=True)
     parser.add_argument("--adapter_path", required=True)
-    parser.add_argument("--text", default="")
-    parser.add_argument("--title", default="")
-    parser.add_argument("--answer", default="")
+    parser.add_argument("--sentence", default=None, help="Official O-LoRA style input sentence.")
+    parser.add_argument("--text", default=None, help="Alias for --sentence.")
+    parser.add_argument("--label", default=None, help="Optional gold label for one-sample correctness check.")
     parser.add_argument("--max_new_tokens", type=int, default=None)
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     task = get_task_spec(args.task)
+    sentence = args.sentence if args.sentence is not None else args.text
+    if not sentence:
+        raise ValueError("Please provide --sentence or --text.")
+
+    labels = load_task_labels(task, cfg.data)
+    labels_str = ", ".join(labels)
+    example = {
+        "Task": task.task_type,
+        "Dataset": task.dataset_name,
+        "Samples": [],
+        "subset": "test",
+        "Instance": {
+            "id": "0",
+            "sentence": sentence,
+            "label": args.label or "",
+            "ground_truth": args.label or "",
+            "instruction": task.instruction + "Option: " + labels_str + " \n" + "{0}" + "\nAnswer:",
+        },
+    }
+    instruction = build_instance_instruction(example, cfg.data)
+
     tokenizer = load_tokenizer(cfg)
     tokenizer.padding_side = "left"
     model = load_base_causal_lm(cfg)
@@ -61,11 +64,9 @@ def main() -> None:
     else:
         device = next(model.parameters()).device
 
-    example = make_example(args, task.name)
-    prompt = build_chat_prompt(tokenizer, task.build_prompt(example))
+    prompt = build_model_prompt(tokenizer, instruction)
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=cfg.data.max_source_length)
     inputs = {key: value.to(device) for key, value in inputs.items()}
-    prompt_len = inputs["input_ids"].shape[1]
     generated = model.generate(
         **inputs,
         max_new_tokens=args.max_new_tokens or cfg.training.generation_max_new_tokens,
@@ -73,16 +74,26 @@ def main() -> None:
         eos_token_id=tokenizer.eos_token_id,
         do_sample=False,
     )
-    pred_text = tokenizer.decode(generated[0, prompt_len:], skip_special_tokens=True).strip()
-    pred_id = decode_label_id(pred_text, task)
-    pred_label = task.label_names[pred_id] if pred_id >= 0 else "unparsed"
+    decoded = tokenizer.decode(
+        generated[0],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=True,
+    )
+    prediction = strip_answer_prefix(decoded)
 
-    print("Prompt:")
-    print(prompt)
-    print("\nRaw prediction:")
-    print(pred_text)
-    print("\nParsed label:")
-    print(pred_label)
+    print("Instruction:")
+    print(instruction)
+    print("\nAllowed labels:")
+    print(", ".join(labels))
+    print("\nRaw generation:")
+    print(decoded)
+    print("\nPrediction:")
+    print(prediction)
+    if args.label is not None:
+        print("\nGold label:")
+        print(args.label)
+        print("\nExact match:")
+        print(exact_match_score(prediction, args.label))
 
 
 if __name__ == "__main__":

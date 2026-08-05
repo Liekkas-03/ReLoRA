@@ -8,12 +8,15 @@ from typing import Any
 
 @dataclass
 class DataConfig:
+    benchmark_data_dir: str = "CL_Benchmark"
     max_source_length: int = 512
     max_target_length: int = 16
     max_train_samples: int | None = None
     max_eval_samples: int | None = None
     num_proc: int = 1
     trust_remote_code: bool = False
+    add_task_name: bool = True
+    add_dataset_name: bool = True
 
 
 @dataclass

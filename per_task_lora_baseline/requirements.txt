@@ -6,3 +6,5 @@ peft>=0.11.0
 sentencepiece
 protobuf
 safetensors
+rouge-score
+tqdm
