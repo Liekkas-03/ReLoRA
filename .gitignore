@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+outputs/
+models/
+datasets/
+cache/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.pdf
+*.docx

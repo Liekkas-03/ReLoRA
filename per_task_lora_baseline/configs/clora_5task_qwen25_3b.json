@@ -1,0 +1,53 @@
+{
+  "run_name": "clora5_qwen25_3b",
+  "base_model_name_or_path": "Qwen/Qwen2.5-3B-Instruct",
+  "output_root": "outputs/per_task_lora",
+  "dataset_cache_dir": null,
+  "model_cache_dir": null,
+  "seed": 42,
+  "tasks": ["ag_news", "amazon", "yelp", "dbpedia", "yahoo"],
+  "data": {
+    "max_source_length": 768,
+    "max_target_length": 16,
+    "max_train_samples": null,
+    "max_eval_samples": null,
+    "num_proc": 1,
+    "trust_remote_code": false
+  },
+  "lora": {
+    "r": 8,
+    "alpha": 16,
+    "dropout": 0.05,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "training": {
+    "num_train_epochs": 3,
+    "learning_rate": 0.0002,
+    "weight_decay": 0.0,
+    "per_device_train_batch_size": 2,
+    "per_device_eval_batch_size": 4,
+    "gradient_accumulation_steps": 16,
+    "warmup_ratio": 0.03,
+    "logging_steps": 20,
+    "save_strategy": "epoch",
+    "eval_strategy": "epoch",
+    "predict_with_generate": true,
+    "generation_max_new_tokens": 16,
+    "fp16": true,
+    "bf16": false,
+    "gradient_checkpointing": true,
+    "load_in_8bit": false,
+    "load_in_4bit": false,
+    "overwrite_output_dir": false,
+    "save_total_limit": 2,
+    "report_to": "none"
+  }
+}
