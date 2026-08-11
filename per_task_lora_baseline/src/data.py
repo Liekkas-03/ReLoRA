@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,16 @@ def load_task_labels(task: TaskSpec, data_cfg: DataConfig) -> list[str]:
     return [str(label) for label in labels]
 
 
-def _sample_instances(records: list[dict[str, Any]], max_samples: int | None) -> list[dict[str, Any]]:
+def _sample_instances(
+    records: list[dict[str, Any]],
+    max_samples: int | None,
+    shuffle: bool,
+    seed: int,
+) -> list[dict[str, Any]]:
+    records = list(records)
+    if shuffle:
+        rng = random.Random(seed)
+        rng.shuffle(records)
     if max_samples is None or max_samples >= len(records):
         return records
     return records[:max_samples]
@@ -87,13 +97,16 @@ def load_task_split(task: TaskSpec, data_cfg: DataConfig, split: str, max_sample
     if not isinstance(records, list):
         raise ValueError(f"{split}.json must contain a list: {split_path}")
     labels = load_task_labels(task, data_cfg)
-    records = _sample_instances(records, max_samples)
+    records = _sample_instances(records, max_samples, data_cfg.shuffle, data_cfg.data_seed)
     examples = _build_olora_examples(task, records, labels, subset=split)
     return Dataset.from_list(examples)
 
 
 def get_train_eval_raw(task: TaskSpec, data_cfg: DataConfig) -> tuple[Dataset, Dataset, list[str]]:
-    train = load_task_split(task, data_cfg, "train", data_cfg.max_train_samples)
+    train_max = data_cfg.train_samples_per_task
+    if train_max is None:
+        train_max = data_cfg.max_train_samples
+    train = load_task_split(task, data_cfg, "train", train_max)
     eval_ds = load_task_split(task, data_cfg, "test", data_cfg.max_eval_samples)
     labels = load_task_labels(task, data_cfg)
     return train, eval_ds, labels
@@ -142,11 +155,7 @@ class OLoRADecoderCollator:
         input_ids_list: list[list[int]] = []
         labels_list: list[list[int]] = []
         metadata: list[dict[str, Any]] = []
-        limit_input_len = (
-            self.data_cfg.max_source_length + self.data_cfg.max_target_length
-            if self.train
-            else self.data_cfg.max_source_length
-        )
+        limit_input_len = self.data_cfg.max_seq_length
 
         eos = self.tokenizer.eos_token or ""
         for example in batch:

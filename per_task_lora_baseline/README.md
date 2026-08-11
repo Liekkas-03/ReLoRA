@@ -53,6 +53,46 @@ AutoDL 云端可以联网时，可以直接保持这个模型名，运行时会�
 "base_model_name_or_path": "/root/autodl-tmp/models/Qwen2.5-3B-Instruct"
 ```
 
+## 当前训练参数
+
+当前使用你指定的 BF16-LoRA 参数：
+
+```text
+model_name: Qwen/Qwen2.5-3B-Instruct
+training_type: BF16-LoRA
+
+train_samples_per_task: 1000
+epochs_per_task: 1
+max_seq_length: 256
+packing: false
+shuffle: true
+
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4
+effective_batch_size: 16
+
+optimizer: adamw_torch
+learning_rate: 2.0e-4
+lr_scheduler_type: constant_with_warmup
+warmup_ratio: 0.03
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_bias: none
+target_modules: q_proj, v_proj
+
+bf16: true
+fp16: false
+gradient_checkpointing: true
+tf32: true
+
+seed: 42
+data_seed: 42
+```
+
 ## 目录结构
 
 ```text

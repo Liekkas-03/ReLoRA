@@ -27,6 +27,7 @@ def build_training_args(cfg, task_output_dir: Path):
         num_train_epochs=train_cfg.num_train_epochs,
         learning_rate=train_cfg.learning_rate,
         weight_decay=train_cfg.weight_decay,
+        max_grad_norm=train_cfg.max_grad_norm,
         per_device_train_batch_size=train_cfg.per_device_train_batch_size,
         per_device_eval_batch_size=train_cfg.per_device_eval_batch_size,
         gradient_accumulation_steps=train_cfg.gradient_accumulation_steps,
@@ -45,6 +46,14 @@ def build_training_args(cfg, task_output_dir: Path):
         kwargs["eval_strategy"] = train_cfg.eval_strategy
     else:
         kwargs["evaluation_strategy"] = train_cfg.eval_strategy
+    if "optim" in sig.parameters:
+        kwargs["optim"] = train_cfg.optimizer
+    if "lr_scheduler_type" in sig.parameters:
+        kwargs["lr_scheduler_type"] = train_cfg.lr_scheduler_type
+    if "data_seed" in sig.parameters:
+        kwargs["data_seed"] = cfg.data.data_seed
+    if "tf32" in sig.parameters:
+        kwargs["tf32"] = train_cfg.tf32
     return TrainingArguments(**kwargs)
 
 

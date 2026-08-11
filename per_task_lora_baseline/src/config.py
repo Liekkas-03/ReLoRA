@@ -9,8 +9,13 @@ from typing import Any
 @dataclass
 class DataConfig:
     benchmark_data_dir: str = "CL_Benchmark"
+    train_samples_per_task: int | None = 1000
+    max_seq_length: int = 256
+    packing: bool = False
+    shuffle: bool = True
+    data_seed: int = 42
     max_source_length: int = 512
-    max_target_length: int = 16
+    max_target_length: int = 50
     max_train_samples: int | None = None
     max_eval_samples: int | None = None
     num_proc: int = 1
@@ -27,12 +32,7 @@ class LoraConfigValues:
     target_modules: list[str] = field(
         default_factory=lambda: [
             "q_proj",
-            "k_proj",
             "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
         ]
     )
 
@@ -42,9 +42,13 @@ class TrainConfig:
     num_train_epochs: float = 3
     learning_rate: float = 3e-4
     weight_decay: float = 0.0
+    optimizer: str = "adamw_torch"
+    lr_scheduler_type: str = "constant_with_warmup"
+    max_grad_norm: float = 1.0
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 8
     gradient_accumulation_steps: int = 8
+    effective_batch_size: int | None = None
     warmup_ratio: float = 0.03
     logging_steps: int = 20
     save_strategy: str = "epoch"
@@ -53,6 +57,7 @@ class TrainConfig:
     generation_max_new_tokens: int = 16
     fp16: bool = True
     bf16: bool = False
+    tf32: bool = False
     gradient_checkpointing: bool = False
     load_in_8bit: bool = False
     load_in_4bit: bool = False
@@ -66,6 +71,7 @@ class ExperimentConfig:
     run_name: str
     base_model_name_or_path: str
     output_root: str
+    training_type: str = "BF16-LoRA"
     dataset_cache_dir: str | None = None
     model_cache_dir: str | None = None
     seed: int = 42
