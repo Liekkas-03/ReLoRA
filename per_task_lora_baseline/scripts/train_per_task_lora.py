@@ -21,6 +21,8 @@ from src.utils import safe_mkdir, save_json, set_global_seed, split_task_arg
 
 def build_training_args(cfg, task_output_dir: Path):
     train_cfg = cfg.training
+    sig = inspect.signature(TrainingArguments.__init__)
+    supported_args = set(sig.parameters)
     kwargs = dict(
         output_dir=str(task_output_dir / "trainer"),
         overwrite_output_dir=train_cfg.overwrite_output_dir,
@@ -41,7 +43,6 @@ def build_training_args(cfg, task_output_dir: Path):
         report_to=[] if train_cfg.report_to == "none" else train_cfg.report_to,
         remove_unused_columns=False,
     )
-    sig = inspect.signature(TrainingArguments.__init__)
     if "eval_strategy" in sig.parameters:
         kwargs["eval_strategy"] = train_cfg.eval_strategy
     else:
@@ -54,7 +55,11 @@ def build_training_args(cfg, task_output_dir: Path):
         kwargs["data_seed"] = cfg.data.data_seed
     if "tf32" in sig.parameters:
         kwargs["tf32"] = train_cfg.tf32
-    return TrainingArguments(**kwargs)
+    filtered_kwargs = {key: value for key, value in kwargs.items() if key in supported_args}
+    skipped = sorted(set(kwargs) - set(filtered_kwargs))
+    if skipped:
+        print(f"[warn] TrainingArguments does not support these options in this environment: {skipped}")
+    return TrainingArguments(**filtered_kwargs)
 
 
 def train_one_task(cfg, task_name: str) -> None:
