@@ -22,9 +22,8 @@ from src.utils import safe_mkdir, save_json, set_global_seed, split_task_arg
 
 
 @torch.no_grad()
-def evaluate_one(cfg, task_name: str, adapters_root: Path) -> dict:
+def evaluate_one(cfg, task_name: str, adapter_path: Path, task_output_dir: Path) -> dict:
     task = get_task_spec(task_name)
-    adapter_path = adapters_root / task.name / "adapter"
     if not adapter_path.exists():
         raise FileNotFoundError(f"Adapter not found for {task.name}: {adapter_path}")
 
@@ -89,7 +88,6 @@ def evaluate_one(cfg, task_name: str, adapters_root: Path) -> dict:
         "predict_rougeL": raw_metrics["rougeL"],
         "predict_samples": len(gold_labels),
     }
-    task_output_dir = adapters_root / task.name
     safe_mkdir(task_output_dir)
     predictions_path = task_output_dir / "predict_eval_predictions.jsonl"
     with open(predictions_path, "w", encoding="utf-8") as f:
@@ -103,6 +101,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to JSON config.")
     parser.add_argument("--adapters_root", default=None, help="Root containing task/adapter directories.")
+    parser.add_argument("--single_adapter_path", default=None, help="Use one adapter to evaluate every task.")
+    parser.add_argument("--single_output_root", default=None, help="Output root for --single_adapter_path results.")
     parser.add_argument("--tasks", default=None, help="Comma-separated task names. Defaults to config tasks.")
     parser.add_argument("--output", default=None, help="Optional metrics JSON path.")
     args = parser.parse_args()
@@ -112,13 +112,34 @@ def main() -> None:
     adapters_root = Path(args.adapters_root) if args.adapters_root else cfg.run_output_dir
     tasks = split_task_arg(args.tasks, cfg.tasks)
 
+    single_adapter_path = Path(args.single_adapter_path) if args.single_adapter_path else None
+    single_output_root = None
+    if single_adapter_path is not None:
+        single_output_root = (
+            Path(args.single_output_root)
+            if args.single_output_root
+            else single_adapter_path.parent / "eval"
+        )
+
     all_metrics = {}
     for task_name in tasks:
-        metrics = evaluate_one(cfg, task_name, adapters_root)
+        task = get_task_spec(task_name)
+        if single_adapter_path is not None:
+            adapter_path = single_adapter_path
+            task_output_dir = single_output_root / task.name
+        else:
+            adapter_path = adapters_root / task.name / "adapter"
+            task_output_dir = adapters_root / task.name
+        metrics = evaluate_one(cfg, task_name, adapter_path, task_output_dir)
         all_metrics[task_name] = metrics
         print(f"{task_name}: {metrics}")
 
-    output = Path(args.output) if args.output else adapters_root / "per_task_eval_metrics.json"
+    if args.output:
+        output = Path(args.output)
+    elif single_output_root is not None:
+        output = single_output_root / "merged_eval_metrics.json"
+    else:
+        output = adapters_root / "per_task_eval_metrics.json"
     safe_mkdir(output.parent)
     save_json(output, all_metrics)
     print(f"Saved metrics to {output}")
