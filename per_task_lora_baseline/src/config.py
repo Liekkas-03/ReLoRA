@@ -38,6 +38,48 @@ class LoraConfigValues:
 
 
 @dataclass
+class RankPoolConfig:
+    global_rank: int = 32
+    group_rank: int = 4
+    top_k_groups: int = 2
+    lora_alpha: int = 64
+    lora_dropout: float = 0.05
+    target_modules: list[str] = field(
+        default_factory=lambda: [
+            "q_proj",
+            "v_proj",
+        ]
+    )
+    key_loss_weight: float = 0.01
+    query_samples: int = 32
+
+    @property
+    def num_groups(self) -> int:
+        if self.global_rank % self.group_rank != 0:
+            raise ValueError(
+                f"global_rank={self.global_rank} must be divisible by group_rank={self.group_rank}."
+            )
+        return self.global_rank // self.group_rank
+
+
+@dataclass
+class RecyclingConfig:
+    enabled: bool = True
+    importance_weight: float = 1.0
+    redundancy_weight: float = 1.0
+    usage_weight: float = 0.5
+    replay_samples_per_task: int = 64
+    eval_samples_per_task: int = 128
+    recovery_steps: int = 30
+    distill_temperature: float = 2.0
+    replay_loss_weight: float = 1.0
+    epsilon: float = 1.0
+    max_trials: int = 4
+    recovery_learning_rate: float | None = None
+    save_teacher_before_recycling: bool = True
+
+
+@dataclass
 class TrainConfig:
     num_train_epochs: float = 3
     learning_rate: float = 3e-4
@@ -78,6 +120,8 @@ class ExperimentConfig:
     tasks: list[str] = field(default_factory=list)
     data: DataConfig = field(default_factory=DataConfig)
     lora: LoraConfigValues = field(default_factory=LoraConfigValues)
+    rank_pool: RankPoolConfig = field(default_factory=RankPoolConfig)
+    recycling: RecyclingConfig = field(default_factory=RecyclingConfig)
     training: TrainConfig = field(default_factory=TrainConfig)
 
     @property
@@ -97,5 +141,7 @@ def load_config(path: str | Path) -> ExperimentConfig:
         raw = json.load(f)
     raw["data"] = _pick(raw, "data", DataConfig)
     raw["lora"] = _pick(raw, "lora", LoraConfigValues)
+    raw["rank_pool"] = _pick(raw, "rank_pool", RankPoolConfig)
+    raw["recycling"] = _pick(raw, "recycling", RecyclingConfig)
     raw["training"] = _pick(raw, "training", TrainConfig)
     return ExperimentConfig(**raw)

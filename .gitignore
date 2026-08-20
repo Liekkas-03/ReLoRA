@@ -7,6 +7,7 @@ cache/
 CL_Benchmark/
 O-LoRA/
 O-LoRA-main/
+.tmp_pclr/
 *.zip
 *.pt
 *.pth
